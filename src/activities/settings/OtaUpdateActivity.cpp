@@ -7,6 +7,7 @@
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "util/NtpTime.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/OtaUpdater.h"
@@ -25,6 +26,10 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     state = CHECKING_FOR_UPDATE;
   }
   requestUpdateAndWait();
+
+  // A fresh device has no clock until the first kosync run; TLS to GitHub
+  // fails X.509 validity checks at 1970, so set the time first.
+  NtpTime::syncOnce();
 
   const auto res = updater.checkForUpdate();
   if (res != OtaUpdater::OK) {
