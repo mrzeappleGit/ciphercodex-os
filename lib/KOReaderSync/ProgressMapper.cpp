@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "ChapterXPathResolver.h"
+#include "CipherCodexProgress.h"
 #include "Epub/Section.h"
 #include "Epub/htmlEntities.h"
 #include "Utf8.h"
@@ -203,6 +204,7 @@ class ParagraphStreamer final : public Print {
   int revVisChars = 0;
   size_t totalVisChars = 0;
   size_t targetVisChars = 0;
+  size_t visCharTarget = 0;  // Global-char mode: 1-based visible-char target across the spine item
 
   // --- Legacy reverse mode (paragraph index only, no ancestry) ---
   int revParagraph = 0;
@@ -380,6 +382,13 @@ class ParagraphStreamer final : public Print {
 
   void onVisibleCodepoint() {
     totalVisChars++;
+    if (visCharTarget > 0 && !revDone && totalVisChars >= visCharTarget) {
+      // Global-char mode: the target counts from the start of the spine item, not from a
+      // matched element; the enclosing paragraph is whatever <p> count we have seen so far.
+      paragraphAtMatch = pCount;
+      targetVisChars = totalVisChars;
+      revDone = true;
+    }
     if (revPFound && !revDone) {
       // Ancestry mode: count only while inside the fully-matched element and in the target text node.
       // Legacy mode: count only while still inside the matched paragraph and in the target text node.
@@ -592,7 +601,18 @@ class ParagraphStreamer final : public Print {
   }
 
  public:
+  // Tag type: disambiguates the global visible-char constructor from the byte-offset one.
+  struct VisCharTarget {
+    size_t count;
+  };
+
   explicit ParagraphStreamer(size_t targetByte) : fwdTarget(targetByte), revChar(0) {
+    memset(stepEnteredAtDepth, -1, sizeof(stepEnteredAtDepth));
+  }
+
+  // Global-char mode (CipherCodex "o=<charOffset>"): find the count-th visible character
+  // of the whole spine item and capture its enclosing paragraph index.
+  explicit ParagraphStreamer(VisCharTarget target) : fwdTarget(SIZE_MAX), revChar(0), visCharTarget(target.count) {
     memset(stepEnteredAtDepth, -1, sizeof(stepEnteredAtDepth));
   }
 
@@ -734,6 +754,13 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   const float clampedPercentage = std::max(0.0f, std::min(1.0f, koPos.percentage));
   const size_t targetBytes = static_cast<size_t>(static_cast<float>(bookSize) * clampedPercentage);
 
+  // CipherCodex Android pushes "ciphercodex:s=<spine>;o=<charOffset>" instead of a
+  // crengine XPointer. Its spine index is authoritative; the accurate percentage field
+  // still drives the byte fallback below when the char offset cannot be resolved.
+  CipherCodexProgress ccPos{};
+  const bool isCipherCodex =
+      CipherCodexProgress::parse(koPos.xpath, ccPos) && ccPos.spineIndex >= 0 && ccPos.spineIndex < spineCount;
+
   const int docFrag = parseIndex(koPos.xpath, "/body/DocFragment[");
   const int xpathP = parseIndex(koPos.xpath, "/p[", true);
   const int xpathChar = parseCharOffset(koPos.xpath);
@@ -745,7 +772,9 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   // Use ancestry mode whenever the XPath has a structured path (always more accurate than global counting).
   const bool useAncestry = xpathStepCount > 0;
 
-  if (xpathSpine >= 0 && xpathSpine < spineCount) {
+  if (isCipherCodex) {
+    result.spineIndex = ccPos.spineIndex;
+  } else if (xpathSpine >= 0 && xpathSpine < spineCount) {
     result.spineIndex = xpathSpine;
   } else {
     for (int i = 0; i < spineCount; i++) {
@@ -782,7 +811,28 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
 
   float intra = 0.0f;
   bool resolvedIntra = false;
-  if (useAncestry) {
+  if (isCipherCodex) {
+    if (ccPos.charOffset <= 0) {
+      resolvedIntra = true;  // Offset 0 = chapter start
+    } else {
+      // Map the char offset to intra-spine progress by streaming the XHTML and counting
+      // visible characters (same extraction the XPath paths use). If the offset lies past
+      // this device's character count, resolvedIntra stays false and the percentage-based
+      // byte fallback below positions proportionally within the chapter instead.
+      ParagraphStreamer s(ParagraphStreamer::VisCharTarget{static_cast<size_t>(ccPos.charOffset)});
+      if (streamSpine(epub, result.spineIndex, s) && s.found()) {
+        intra = s.progress();
+        resolvedIntra = true;
+        const int pAtMatch = s.getParagraphAtMatch();
+        if (pAtMatch > 0) {
+          result.paragraphIndex = static_cast<uint16_t>(pAtMatch);
+          result.hasParagraphIndex = true;
+        }
+        LOG_DBG("PM", "CipherCodex s=%d o=%d -> %.1f%% (target=%zu total=%zu p~%d)", ccPos.spineIndex, ccPos.charOffset,
+                intra * 100, s.getTargetVisChars(), s.getTotalVisChars(), pAtMatch);
+      }
+    }
+  } else if (useAncestry) {
     ParagraphStreamer s(xpathSteps, xpathStepCount, xpathChar, xpathTextNode);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();

@@ -2,9 +2,14 @@
 
 #include <ArduinoJson.h>
 #include <Logging.h>
+#include <MD5Builder.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
+#include <esp_mac.h>
 
+#include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <ctime>
 
 #include "KOReaderCredentialStore.h"
@@ -12,9 +17,28 @@
 int KOReaderSyncClient::lastHttpCode = 0;
 
 namespace {
-// Device identifier for CrossPoint reader
-constexpr char DEVICE_NAME[] = "CrossPoint";
-constexpr char DEVICE_ID[] = "crosspoint-reader";
+// Device name reported to the KOSync server
+constexpr char DEVICE_NAME[] = "CipherCodex X4";
+
+// KOSync expects a stable per-device id (KOReader sends 32 uppercase hex).
+// Derive it as MD5 of the efuse WiFi MAC: unique per device and deterministic
+// across boots and firmware updates without persisting anything. Cached in a
+// 33-byte static (DRAM) computed once on first use; sync is a cold path.
+const char* getDeviceId() {
+  static char id[33] = "";
+  if (id[0] != '\0') return id;
+  uint8_t mac[6] = {};
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  MD5Builder md5;
+  md5.begin();
+  md5.add(mac, sizeof(mac));
+  md5.calculate();
+  md5.getChars(id);
+  for (char* c = id; *c != '\0'; ++c) {
+    *c = static_cast<char>(toupper(static_cast<unsigned char>(*c)));
+  }
+  return id;
+}
 
 // Small TLS buffers to fit in ESP32-C3's limited heap (~46KB free after WiFi).
 // KOSync payloads are tiny JSON (<1KB), so 2KB buffers are sufficient.
@@ -165,6 +189,13 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
       return JSON_ERROR;
     }
 
+    // The reference kosync server answers 200 with an empty object when nothing is
+    // stored; "no progress" is signaled by the absent percentage field, not the status.
+    if (doc["percentage"].isNull()) {
+      LOG_DBG("KOSync", "No progress stored for document");
+      return NOT_FOUND;
+    }
+
     outProgress.document = documentHash;
     outProgress.progress = doc["progress"].as<std::string>();
     outProgress.percentage = doc["percentage"].as<float>();
@@ -200,9 +231,12 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   JsonDocument doc;
   doc["document"] = progress.document;
   doc["progress"] = progress.progress;
-  doc["percentage"] = progress.percentage;
+  // KOReader convention: percentage is a 0..1 fraction truncated to 4 decimals
+  // (floor(x*10000)/10000). The CipherCodex Android app relies on this field.
+  const double pct = std::max(0.0, std::min(1.0, static_cast<double>(progress.percentage)));
+  doc["percentage"] = std::floor(pct * 10000.0) / 10000.0;
   doc["device"] = DEVICE_NAME;
-  doc["device_id"] = DEVICE_ID;
+  doc["device_id"] = getDeviceId();
 
   std::string body;
   serializeJson(doc, body);
