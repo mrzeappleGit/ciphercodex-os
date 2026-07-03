@@ -17,10 +17,10 @@
 #include <string>
 
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
+constexpr char latestReleaseUrl[] = "https://api.github.com/repos/mrzeappleGit/ciphercodex-os/releases/latest";
 
 esp_err_t http_client_set_header_cb(esp_http_client_handle_t http_client) {
-  return esp_http_client_set_header(http_client, "User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  return esp_http_client_set_header(http_client, "User-Agent", "CipherCodex-ESP32-" CROSSPOINT_VERSION);
 }
 }  // namespace
 
@@ -71,14 +71,25 @@ bool OtaUpdater::isUpdateNewer() const {
     return false;
   }
 
-  int currentMajor, currentMinor, currentPatch;
-  int latestMajor, latestMinor, latestPatch;
+  int currentMajor = 0, currentMinor = 0, currentPatch = 0;
+  int latestMajor = 0, latestMinor = 0, latestPatch = 0;
 
   const auto currentVersion = CROSSPOINT_VERSION;
 
-  // semantic version check (only match on 3 segments)
-  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
-  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
+  // semantic version check (only match on 3 segments); GitHub tags are
+  // conventionally "v"-prefixed, and an unparseable tag must not compare
+  // uninitialized ints
+  const char* latestTag = latestVersion.c_str();
+  if (*latestTag == 'v' || *latestTag == 'V') {
+    ++latestTag;
+  }
+  if (sscanf(latestTag, "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch) != 3) {
+    LOG_ERR("OTA", "Unparseable release tag: %s", latestVersion.c_str());
+    return false;
+  }
+  if (sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch) != 3) {
+    return false;  // can't compare against an unparseable own version
+  }
 
   /*
    * Compare major versions.

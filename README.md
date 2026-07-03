@@ -1,14 +1,16 @@
-# CrossPoint Reader
+# CipherCodex OS
 
-[![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
+CipherCodex OS is open-source e-reader firmware for the ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4), built on CrossPoint Reader and restyled with the Cipher design language: angular geometry, high-contrast black-on-white chrome, and the signature stack-of-text-lines mark. It keeps CrossPoint's reading engine and adds first-class interop with the CipherCodex Android app via KOReader progress sync, so your reading position follows you between the X4 and your phone.
 
-CrossPoint is open-source e-reader firmware - community-built, fully hackable, free forever. It's maintained by a growing community of developers and readers who believe your device should do what you want - not what a manufacturer decided for you.
+> ### Built on CrossPoint Reader
+>
+> CipherCodex OS is a fork of **[CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader)** - the community-built, fully hackable firmware that does the heavy lifting here. Please star, support, and contribute to the upstream project, and consider [funding its contributors](https://app.royalty.dev/crosspoint-reader/crosspoint-reader). CrossPoint's MIT license is preserved unchanged in this fork (see [LICENSE](./LICENSE)).
 
-**Now running on:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
+Firmware releases for this fork are published at [mrzeappleGit/ciphercodex-os](https://github.com/mrzeappleGit/ciphercodex-os/releases), which is also where the built-in OTA updater checks for updates.
 
 ![CrossPoint Reader running on Xteink device](./docs/images/cover.jpg)
 
-## What can CrossPoint do?
+## What can CipherCodex OS do?
 
 - **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter navigation, footnotes, bookmarks, go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more. 
 
