@@ -11,22 +11,11 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "ReadingStats.h"
+#include "util/StatsFormat.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-
-std::string formatHours(uint32_t seconds) {
-  char buf[16];
-  const uint32_t h = seconds / 3600;
-  const uint32_t m = (seconds % 3600) / 60;
-  if (h > 0) {
-    snprintf(buf, sizeof(buf), "%uH %02uM", h, m);
-  } else {
-    snprintf(buf, sizeof(buf), "%uM", m);
-  }
-  return buf;
-}
 
 // Day-of-month labels for the bar strip: locale-neutral, no i18n keys needed.
 std::string dayOfMonthLabel(int daysBack) {
@@ -72,10 +61,10 @@ void ReadingStatsActivity::render(RenderLock&&) {
   };
 
   if (clockValid) {
-    drawRow(StrId::STR_STATS_TODAY, formatHours(READING_STATS.todaySeconds()));
-    drawRow(StrId::STR_STATS_THIS_WEEK, formatHours(READING_STATS.weekSeconds()));
+    drawRow(StrId::STR_STATS_TODAY, StatsFormat::duration(READING_STATS.todaySeconds()));
+    drawRow(StrId::STR_STATS_THIS_WEEK, StatsFormat::duration(READING_STATS.weekSeconds()));
   }
-  drawRow(StrId::STR_STATS_ALL_TIME, formatHours(READING_STATS.allTimeSeconds()));
+  drawRow(StrId::STR_STATS_ALL_TIME, StatsFormat::duration(READING_STATS.allTimeSeconds()));
   if (clockValid) {
     char streak[16];
     snprintf(streak, sizeof(streak), "%u", READING_STATS.currentStreakDays());
@@ -87,7 +76,7 @@ void ReadingStatsActivity::render(RenderLock&&) {
     drawRow(StrId::STR_STATS_PAGES_TURNED, pages);
   }
   if (!APP_STATE.openEpubPath.empty()) {
-    drawRow(StrId::STR_STATS_THIS_BOOK, formatHours(READING_STATS.bookSeconds(APP_STATE.openEpubPath)));
+    drawRow(StrId::STR_STATS_THIS_BOOK, StatsFormat::duration(READING_STATS.bookSeconds(APP_STATE.openEpubPath)));
   }
 
   if (!clockValid) {
@@ -118,7 +107,7 @@ void ReadingStatsActivity::render(RenderLock&&) {
       }
       // Selective label: the peak day's value above its bar.
       if (week[i] == maxDay && week[i] > 0) {
-        const std::string label = formatHours(week[i]);
+        const std::string label = StatsFormat::duration(week[i]);
         const int lw = renderer.getTextWidth(SMALL_FONT_ID, label.c_str());
         int lx = x + barWidth / 2 - lw / 2;
         lx = std::max(marginX, std::min(lx, pageWidth - marginX - lw));
