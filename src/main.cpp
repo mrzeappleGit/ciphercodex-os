@@ -23,6 +23,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "ReadingStats.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "activities/Activity.h"
@@ -251,6 +252,10 @@ void enterDeepSleep(bool fromTimeout = false) {
   deepSleepInProgress = true;
   activityManager.goToSleep(fromTimeout);
 
+  // The reader's onExit (run by goToSleep) finalizes any live session; this
+  // is the safety net for a dirty aggregate from an earlier throttled save.
+  READING_STATS.saveToFile();
+
   if (isQuickResumeSleep) {
     saveSleepFrameBuffer();
   }
@@ -350,6 +355,7 @@ void setup() {
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
+  READING_STATS.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
