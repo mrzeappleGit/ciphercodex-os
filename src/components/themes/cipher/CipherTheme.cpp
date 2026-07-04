@@ -38,6 +38,21 @@ void drawCipherGlyph(const GfxRenderer& renderer, int x, int y) {
   }
 }
 
+// Reading-state leading glyph for library rows: a hollow diamond (never opened)
+// or a left-half-filled diamond (in progress), echoing the OS diamond identity.
+// `black` follows the row's text colour so it inverts on the selected row.
+constexpr int kBookGlyphRad = 6;
+constexpr int kBookGlyphCol = 2 * kBookGlyphRad + 12;  // reserved leading column width
+
+void drawReadingGlyph(const GfxRenderer& renderer, int cx, int cy, UIIcon state, bool black) {
+  if (state == UIIcon::BookReading) {
+    const int lx[3] = {cx, cx, cx - kBookGlyphRad};
+    const int ly[3] = {cy - kBookGlyphRad, cy + kBookGlyphRad, cy};
+    renderer.fillPolygon(lx, ly, 3, black);
+  }
+  CipherEmblem::strokeDiamond(renderer, cx, cy, kBookGlyphRad, 1, black);
+}
+
 // Home tile layout (hero cover + up to two compact secondary recents)
 constexpr int kHomeSlotInset = 10;  // Cover inset within its slot; keeps the selection frame off the art
 constexpr int kHomeColumnGap = 14;  // Gap between hero slot, info column, and secondary rows
@@ -220,7 +235,6 @@ void CipherTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount
                            const std::function<UIIcon(int index)>& rowIcon,
                            const std::function<std::string(int index)>& rowValue, bool highlightValue,
                            const std::function<bool(int index)>& rowDimmed) const {
-  (void)rowIcon;
   (void)highlightValue;
   const auto& metrics = CipherMetrics::values;
   const int rowHeight = (rowSubtitle != nullptr) ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight;
@@ -261,11 +275,35 @@ void CipherTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount
   const int subtitleLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
 
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
+
+  // Cache the visible rows' icons (rowIcon may stat the SD card) and reserve a
+  // leading glyph column when any visible row carries a reading-state glyph, so
+  // book rows and plain rows stay aligned. Lists that pass no book-state icon
+  // leave glyphCol at 0, so their layout is unchanged.
+  constexpr int kMaxVisibleRows = 24;
+  UIIcon visibleIcons[kMaxVisibleRows];
+  bool hasBookGlyphs = false;
+  for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
+    const int slot = i - pageStartIndex;
+    const UIIcon ic = (rowIcon && slot < kMaxVisibleRows) ? rowIcon(i) : UIIcon::None;
+    if (slot < kMaxVisibleRows) visibleIcons[slot] = ic;
+    if (ic == UIIcon::BookNew || ic == UIIcon::BookReading) hasBookGlyphs = true;
+  }
+  const int glyphCol = hasBookGlyphs ? kBookGlyphCol : 0;
+
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
     const bool isSelected = i == selectedIndex;
+    const int textX = rect.x + metrics.contentSidePadding + glyphCol;
 
-    int rowTextWidth = contentWidth - metrics.contentSidePadding * 2;
+    const int slot = i - pageStartIndex;
+    const UIIcon rowGlyph = slot < kMaxVisibleRows ? visibleIcons[slot] : UIIcon::None;
+    if (glyphCol > 0 && (rowGlyph == UIIcon::BookNew || rowGlyph == UIIcon::BookReading)) {
+      drawReadingGlyph(renderer, rect.x + metrics.contentSidePadding + kBookGlyphRad, itemY + rowHeight / 2, rowGlyph,
+                       !isSelected);
+    }
+
+    int rowTextWidth = contentWidth - metrics.contentSidePadding * 2 - glyphCol;
     std::string valueText;
     if (rowValue != nullptr) {
       valueText = rowValue(i);
@@ -281,14 +319,13 @@ void CipherTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount
                            : itemY + (rowHeight - titleLineHeight) / 2;
 
     auto item = renderer.truncatedText(UI_10_FONT_ID, rowTitle(i).c_str(), rowTextWidth);
-    renderer.drawText(UI_10_FONT_ID, rect.x + metrics.contentSidePadding, titleY, item.c_str(), !isSelected);
+    renderer.drawText(UI_10_FONT_ID, textX, titleY, item.c_str(), !isSelected);
 
     // Checkerboard dither for dimmed rows (existing dither gray).
     if (rowDimmed && rowDimmed(i) && !isSelected) {
       const int titleWidth = renderer.getTextWidth(UI_10_FONT_ID, item.c_str());
-      const int tx = rect.x + metrics.contentSidePadding;
       for (int py = titleY; py < titleY + titleLineHeight; py++)
-        for (int px = tx; px < tx + titleWidth; px++)
+        for (int px = textX; px < textX + titleWidth; px++)
           if ((px + py) % 2 == 0) renderer.drawPixel(px, py, false);
     }
 
@@ -296,8 +333,8 @@ void CipherTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount
       const std::string subtitleText = rowSubtitle(i);
       if (!subtitleText.empty()) {
         auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
-        renderer.drawText(SMALL_FONT_ID, rect.x + metrics.contentSidePadding,
-                          titleY + titleLineHeight + kSubtitleLineGap, subtitle.c_str(), !isSelected);
+        renderer.drawText(SMALL_FONT_ID, textX, titleY + titleLineHeight + kSubtitleLineGap, subtitle.c_str(),
+                          !isSelected);
       }
     }
 

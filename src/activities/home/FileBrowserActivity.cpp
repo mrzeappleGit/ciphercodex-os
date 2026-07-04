@@ -10,6 +10,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "ReadingState.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -369,7 +370,17 @@ void FileBrowserActivity::render(RenderLock&&) {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
         [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); },
+        [this](int index) -> UIIcon {
+          // Reading-state glyph for openable books; folders/other files keep
+          // their (theme-ignored) file-type icon. Full path must match the
+          // reader's open path so the progress-cache hash lines up.
+          const std::string& entry = files[index];
+          if (entry.empty() || entry.back() == '/') return UITheme::getFileIcon(entry);
+          std::string clean = basepath;
+          if (clean.empty() || clean.back() != '/') clean += '/';
+          const UIIcon glyph = ReadingState::glyphForBook(clean + entry);
+          return glyph != UIIcon::None ? glyph : UITheme::getFileIcon(entry);
+        },
         [this](int index) { return getFileExtension(files[index]); }, false);
   }
 

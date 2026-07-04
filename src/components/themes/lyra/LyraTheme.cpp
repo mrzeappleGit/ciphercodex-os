@@ -50,6 +50,10 @@ const uint8_t* iconForName(UIIcon icon, int size) {
       case UIIcon::Image:
         return Image24Icon;
       case UIIcon::Book:
+      // Reading-state glyphs are a Cipher-theme concept; other icon themes just
+      // show the book icon so book rows never render a blank icon slot.
+      case UIIcon::BookNew:
+      case UIIcon::BookReading:
         return Book24Icon;
       case UIIcon::File:
         return File24Icon;
@@ -61,6 +65,8 @@ const uint8_t* iconForName(UIIcon icon, int size) {
       case UIIcon::Folder:
         return FolderIcon;
       case UIIcon::Book:
+      case UIIcon::BookNew:
+      case UIIcon::BookReading:
         return BookIcon;
       case UIIcon::Recent:
         return RecentIcon;
