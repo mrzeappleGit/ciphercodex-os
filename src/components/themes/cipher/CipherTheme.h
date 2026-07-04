@@ -7,7 +7,7 @@ class GfxRenderer;
 // Cipher theme metrics (zero runtime cost).
 // Monochrome translation of the CipherCodex brand: angular geometry (all corner
 // radii 0), inverted selection, solid black header band. Values that BaseTheme
-// methods hardcode via BaseMetrics (menu, home cover, side hints) stay equal to
+// methods hardcode via BaseMetrics (menu, side hints) stay equal to
 // BaseMetrics so un-overridden base drawing remains consistent with activities.
 namespace CipherMetrics {
 constexpr ThemeMetrics values = {.batteryWidth = 15,
@@ -30,7 +30,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .homeTopPadding = 40,
                                  .homeCoverHeight = 400,
                                  .homeCoverTileHeight = 400,
-                                 .homeRecentBooksCount = 1,
+                                 .homeRecentBooksCount = 3,
                                  .homeContinueReadingInMenu = false,
                                  .homeMenuTopOffset = 10,
                                  .buttonHintsHeight = 40,
@@ -102,6 +102,9 @@ class CipherTheme : public BaseTheme {
                 const std::function<bool(int index)>& rowDimmed = nullptr) const override;
   void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                        const char* btn4) const override;
+  void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
+                           const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
+                           std::function<bool()> storeCoverBuffer) const override;
   void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                        int selectedIndex) const override;
 };
