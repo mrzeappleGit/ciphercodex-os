@@ -11,11 +11,11 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "activities/reader/ReaderUtils.h"
-#include "util/StatsFormat.h"
 #include "components/UITheme.h"
+#include "components/themes/cipher/CipherEmblem.h"
 #include "fontIds.h"
-#include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "util/StatsFormat.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
@@ -155,15 +155,16 @@ void SleepActivity::renderDefaultSleepScreen() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, tr(STR_CROSSPOINT), true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_SLEEPING));
+  // Cipher daemon diamond emblem, matching the boot screen (OS design comp).
+  CipherEmblem::drawEmblem(renderer, pageWidth / 2, pageHeight / 2 - 10, 62);
+  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 82, tr(STR_CROSSPOINT), true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 107, tr(STR_SLEEPING));
 
   // Frozen at sleep time by design; the reader session was finalized in the
   // reader's onExit before this renders, so today's total is current.
   const std::string statsLine = StatsFormat::summaryLine();
   if (!statsLine.empty()) {
-    renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 125, statsLine.c_str());
+    renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 134, statsLine.c_str());
   }
 
   // Make sleep screen dark unless light is selected in settings
