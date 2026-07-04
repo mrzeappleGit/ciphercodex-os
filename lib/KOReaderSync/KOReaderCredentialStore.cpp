@@ -109,7 +109,9 @@ bool KOReaderCredentialStore::loadFromBinaryFile() {
     serialization::readPod(file, method);
     matchMethod = static_cast<DocumentMatchMethod>(method);
   } else {
-    matchMethod = DocumentMatchMethod::FILENAME;
+    // Legacy binary file without a match-method field: default to BINARY to match the
+    // CipherCodex Android app (see KOReaderCredentialStore.h).
+    matchMethod = DocumentMatchMethod::BINARY;
   }
 
   LOG_DBG("KRS", "Loaded KOReader credentials from binary for user: %s", username.c_str());

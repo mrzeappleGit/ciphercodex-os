@@ -42,7 +42,8 @@ bool load(KOReaderCredentialStore& store, const char* json, bool* needsResave) {
   store.setCredentials(user, pass);
   store.setServerUrl(doc["serverUrl"] | std::string(""));
 
-  uint8_t method = doc["matchMethod"] | (uint8_t)0;
+  // Absent field (legacy config) defaults to BINARY to match the CipherCodex Android app.
+  uint8_t method = doc["matchMethod"] | static_cast<uint8_t>(DocumentMatchMethod::BINARY);
   store.setMatchMethod(static_cast<DocumentMatchMethod>(method));
 
   return true;

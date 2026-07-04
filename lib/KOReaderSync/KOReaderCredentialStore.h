@@ -20,7 +20,10 @@ class KOReaderCredentialStore {
   std::string username;
   std::string password;
   std::string serverUrl;                                            // Custom sync server URL (empty = default)
-  DocumentMatchMethod matchMethod = DocumentMatchMethod::FILENAME;  // Default to filename for compatibility
+  // Default to binary (partial-MD5 of content) to match the CipherCodex Android app and stock
+  // KOReader, both of which key documents by content hash. Filename matching (the upstream
+  // CrossPoint default) never matches the Android app and silently disables cross-device sync.
+  DocumentMatchMethod matchMethod = DocumentMatchMethod::BINARY;
 
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
