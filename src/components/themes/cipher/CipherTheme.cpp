@@ -12,6 +12,7 @@
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
+#include "components/themes/cipher/CipherEmblem.h"
 #include "fontIds.h"
 
 // Internal constants
@@ -25,7 +26,7 @@ constexpr int kGlyphBarGap = 2;
 constexpr int kGlyphWidth = 24;
 constexpr int kGlyphHeight = kGlyphBarCount * kGlyphBarHeight + (kGlyphBarCount - 1) * kGlyphBarGap;
 
-constexpr int kHeaderTextGap = 12;       // Gap between glyph/chamfer and header text
+constexpr int kHeaderTextGap = 12;  // Gap between glyph/chamfer and header text
 constexpr int kSubHeaderAccentWidth = 56;
 constexpr int kMaxHeaderSubtitleWidth = 200;
 constexpr int kMinValueGap = 10;
@@ -38,12 +39,12 @@ void drawCipherGlyph(const GfxRenderer& renderer, int x, int y) {
 }
 
 // Home tile layout (hero cover + up to two compact secondary recents)
-constexpr int kHomeSlotInset = 10;       // Cover inset within its slot; keeps the selection frame off the art
-constexpr int kHomeColumnGap = 14;       // Gap between hero slot, info column, and secondary rows
+constexpr int kHomeSlotInset = 10;  // Cover inset within its slot; keeps the selection frame off the art
+constexpr int kHomeColumnGap = 14;  // Gap between hero slot, info column, and secondary rows
 constexpr int kHomeTextGap = 8;
-constexpr int kHomeFrameGap = 4;         // Outer 2px frame to inner 1px frame offset
+constexpr int kHomeFrameGap = 4;  // Outer 2px frame to inner 1px frame offset
 constexpr int kHomeLabelPadX = 6;
-constexpr int kHomeHeroSlotPercent = 48; // Hero slot share of the tile's inner width
+constexpr int kHomeHeroSlotPercent = 48;  // Hero slot share of the tile's inner width
 constexpr int kPlaceholderBandPadY = 10;
 
 // Angular stand-in cover: bordered book-shaped box with the brand glyph on a
@@ -162,8 +163,11 @@ void CipherTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char*
   drawBatteryRight(renderer, Rect{batteryX, batteryY, metrics.batteryWidth, metrics.batteryHeight},
                    showBatteryPercentage);
 
+  // Daemon-OS wordmark diamond (the "◆"): a small white token on the black
+  // band, tying every header to the boot/sleep emblem. Occupies a kGlyphWidth
+  // slot so the title offset is unchanged.
   const int glyphX = rect.x + metrics.contentSidePadding;
-  drawCipherGlyph(renderer, glyphX, rect.y + (rect.height - kGlyphHeight) / 2);
+  CipherEmblem::drawGlyph(renderer, glyphX + kGlyphWidth / 2, rect.y + rect.height / 2, kGlyphWidth / 2 - 2, false);
 
   const int textLeft = glyphX + kGlyphWidth + kHeaderTextGap;
   const int textRight = notchX - chamfer - kHeaderTextGap;
@@ -171,7 +175,8 @@ void CipherTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char*
   int subtitleWidth = 0;
   std::string truncatedSubtitle;
   if (subtitle) {
-    truncatedSubtitle = renderer.truncatedText(SMALL_FONT_ID, subtitle, kMaxHeaderSubtitleWidth, EpdFontFamily::REGULAR);
+    truncatedSubtitle =
+        renderer.truncatedText(SMALL_FONT_ID, subtitle, kMaxHeaderSubtitleWidth, EpdFontFamily::REGULAR);
     subtitleWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedSubtitle.c_str());
   }
 
@@ -458,8 +463,7 @@ void CipherTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const st
   const int blockH = labelBandH + kHomeTextGap + titleBlockH + authorBlockH;
   int textY = infoTop + std::max(0, (infoH - blockH) / 2);
 
-  const auto continueLabel =
-      renderer.truncatedText(SMALL_FONT_ID, tr(STR_CONTINUE_READING), colW - 2 * kHomeLabelPadX);
+  const auto continueLabel = renderer.truncatedText(SMALL_FONT_ID, tr(STR_CONTINUE_READING), colW - 2 * kHomeLabelPadX);
   if (heroSelected) {
     // Inverted label band carries the selection cue into the info column.
     renderer.fillRect(colX, textY, colW, labelBandH, true);
