@@ -22,6 +22,8 @@
 #include "CrossPointState.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
+#include "EpubReaderSearchActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
@@ -593,6 +595,37 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 
               section.reset();
             }
+          });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::SEARCH: {
+      // Capture the query on the keyboard, then scan chapters for it; a hit
+      // returns a ChapterResult and we jump to that chapter's start (page 0),
+      // reusing the SELECT_CHAPTER jump exactly.
+      startActivityForResult(
+          std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH)),
+          [this](const ActivityResult& kbResult) {
+            if (kbResult.isCancelled) {
+              requestUpdate();
+              return;
+            }
+            const std::string query = std::get<KeyboardResult>(kbResult.data).text;
+            if (query.empty()) {
+              requestUpdate();
+              return;
+            }
+            startActivityForResult(
+                std::make_unique<EpubReaderSearchActivity>(renderer, mappedInput, epub, query),
+                [this](const ActivityResult& searchResult) {
+                  if (!searchResult.isCancelled) {
+                    const auto& chapterResult = std::get<ChapterResult>(searchResult.data);
+                    RenderLock lock(*this);
+                    currentSpineIndex = chapterResult.spineIndex;
+                    pendingAnchor = chapterResult.anchor;
+                    nextPageNumber = 0;
+                    section.reset();
+                  }
+                });
           });
       break;
     }
