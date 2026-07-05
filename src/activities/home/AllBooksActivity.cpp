@@ -9,13 +9,16 @@
 
 #include <algorithm>
 #include <cstring>
+#include <memory>
 
+#include "BookDetailActivity.h"
 #include "MappedInputManager.h"
 #include "ReadingState.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
+constexpr unsigned long LONG_PRESS_MS = 1000;  // hold-to-open-detail threshold
 constexpr size_t NAME_BUFFER_SIZE = 256;
 constexpr size_t MAX_BOOKS = 800;        // hard cap so a huge card can't exhaust RAM
 constexpr int MAX_DIRS = 400;            // bound directories *processed*
@@ -118,6 +121,34 @@ void AllBooksActivity::onExit() {
 
 void AllBooksActivity::loop() {
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
+
+  // After a long-press has fired, swallow input until Confirm is physically
+  // released, so the release doesn't also open the book.
+  if (longPressFired) {
+    if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      longPressFired = false;
+    }
+    return;
+  }
+
+  // Long-press Confirm opens the book's detail screen; a normal Confirm-release
+  // (below) still opens the book directly, preserving quick resume.
+  if (!books.empty() && selectorIndex < static_cast<int>(books.size()) &&
+      mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    longPressFired = true;
+    startActivityForResult(std::make_unique<BookDetailActivity>(renderer, mappedInput, books[selectorIndex]),
+                           [this](const ActivityResult&) {
+                             // A delete inside the detail screen changes the library; re-scan.
+                             loadBooks();
+                             if (books.empty()) {
+                               selectorIndex = 0;
+                             } else if (selectorIndex >= static_cast<int>(books.size())) {
+                               selectorIndex = static_cast<int>(books.size()) - 1;
+                             }
+                             requestUpdate(true);
+                           });
+    return;
+  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!books.empty() && selectorIndex < static_cast<int>(books.size())) {

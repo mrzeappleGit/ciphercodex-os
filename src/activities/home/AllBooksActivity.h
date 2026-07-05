@@ -13,6 +13,7 @@ class AllBooksActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   std::vector<std::string> books;  // full SD paths, sorted
   int selectorIndex = 0;
+  bool longPressFired = false;  // guards the release after a long-press-to-detail
 
   void loadBooks();
 
