@@ -6,10 +6,12 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/StatsFormat.h"
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
-                                               const int bookProgressPercent, const uint8_t currentOrientation,
+                                               const int bookProgressPercent, const int chapterSecondsLeft,
+                                               const int bookSecondsLeft, const uint8_t currentOrientation,
                                                const bool hasFootnotes, const bool hasBookmarks)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks)),
@@ -17,7 +19,9 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent) {}
+      bookProgressPercent(bookProgressPercent),
+      chapterSecondsLeft(chapterSecondsLeft),
+      bookSecondsLeft(bookSecondsLeft) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
                                                                                      bool hasBookmarks) {
@@ -121,8 +125,25 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
       Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight, screen.width, metrics.tabBarHeight},
       progressLine.c_str());
 
-  const int contentTop =
-      screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+  // Optional second subheader row: estimated time left in the chapter and book.
+  // Hidden (chapterSecondsLeft < 0) until there is reading history to set a pace.
+  int timeRowHeight = 0;
+  if (chapterSecondsLeft >= 0) {
+    std::string timeLine =
+        StatsFormat::duration(static_cast<uint32_t>(chapterSecondsLeft)) + " " + std::string(tr(STR_LEFT_IN_CHAPTER));
+    if (bookSecondsLeft >= 0) {
+      timeLine += "  |  " + StatsFormat::duration(static_cast<uint32_t>(bookSecondsLeft)) + " " +
+                  std::string(tr(STR_LEFT_IN_BOOK));
+    }
+    GUI.drawSubHeader(renderer,
+                      Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight,
+                           screen.width, metrics.tabBarHeight},
+                      timeLine.c_str());
+    timeRowHeight = metrics.tabBarHeight;
+  }
+
+  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + timeRowHeight +
+                         metrics.verticalSpacing;
   const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
 
   GUI.drawList(

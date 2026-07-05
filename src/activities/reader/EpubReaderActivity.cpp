@@ -317,9 +317,31 @@ void EpubReaderActivity::loop() {
         bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
       }
       const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+
+      // Time-left estimates from the device-wide reading pace (seconds/page).
+      // Sentinel -1 hides the readout until there is enough history to divide by.
+      int chapterSecondsLeft = -1;
+      int bookSecondsLeft = -1;
+      if (READING_STATS.allTimePagesTurned() > 0 && section && section->pageCount > 0) {
+        const float secPerPage =
+            static_cast<float>(READING_STATS.allTimeSeconds()) / static_cast<float>(READING_STATS.allTimePagesTurned());
+        const int pagesLeftChapter = std::max(0, section->pageCount - currentPage);
+        chapterSecondsLeft = static_cast<int>(pagesLeftChapter * secPerPage);
+        // Extrapolate the book estimate from the current chapter's byte density.
+        const size_t curChapterBytes =
+            epub->getCumulativeSpineItemSize(currentSpineIndex) -
+            (currentSpineIndex >= 1 ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0);
+        if (curChapterBytes > 0 && epub->getBookSize() > 0) {
+          const float bytesPerPage = static_cast<float>(curChapterBytes) / static_cast<float>(section->pageCount);
+          const float remainingBytes = static_cast<float>(epub->getBookSize()) * (1.0f - bookProgress / 100.0f);
+          const float bookPagesLeft = std::max(0.0f, remainingBytes / bytesPerPage);
+          bookSecondsLeft = static_cast<int>(bookPagesLeft * secPerPage);
+        }
+      }
       startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                  renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                                 SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty()),
+                                 chapterSecondsLeft, bookSecondsLeft, SETTINGS.orientation,
+                                 !currentPageFootnotes.empty(), !cachedBookmarks.empty()),
                              [this](const ActivityResult& result) {
                                // Always apply orientation change even if the menu was cancelled
                                const auto& menu = std::get<MenuResult>(result.data);
