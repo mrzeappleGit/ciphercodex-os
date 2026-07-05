@@ -53,13 +53,11 @@ void drawReadingGlyph(const GfxRenderer& renderer, int cx, int cy, UIIcon state,
   CipherEmblem::strokeDiamond(renderer, cx, cy, kBookGlyphRad, 1, black);
 }
 
-// Home tile layout (hero cover + up to two compact secondary recents)
+// Home cover-grid layout (Kindle-style 3-column, up-to-2-row grid of recents)
 constexpr int kHomeSlotInset = 10;  // Cover inset within its slot; keeps the selection frame off the art
-constexpr int kHomeColumnGap = 14;  // Gap between hero slot, info column, and secondary rows
 constexpr int kHomeTextGap = 8;
 constexpr int kHomeFrameGap = 4;  // Outer 2px frame to inner 1px frame offset
 constexpr int kHomeLabelPadX = 6;
-constexpr int kHomeHeroSlotPercent = 48;  // Hero slot share of the tile's inner width
 constexpr int kPlaceholderBandPadY = 10;
 
 // Angular stand-in cover: bordered book-shaped box with the brand glyph on a
@@ -453,98 +451,49 @@ void CipherTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const st
   const int innerX = rect.x + metrics.contentSidePadding;
   const int innerW = rect.width - 2 * metrics.contentSidePadding;
   const int bookCount = std::min(static_cast<int>(recentBooks.size()), metrics.homeRecentBooksCount);
-  const bool hasSecondary = bookCount > 1;
 
-  // Hero slot on the left, sized book-shaped (2:3) so the selection frame hugs
-  // a typical cover; the right column holds the hero info block on top and up
-  // to two compact secondary entries below it.
-  const int heroSlotW = innerW * kHomeHeroSlotPercent / 100;
-  const int heroSlotH = std::min(rect.height, (heroSlotW - 2 * kHomeSlotInset) * 3 / 2 + 2 * kHomeSlotInset);
-  const int heroSlotY = rect.y + (rect.height - heroSlotH) / 2;
-  const int colX = innerX + heroSlotW + kHomeColumnGap;
-  const int colW = innerX + innerW - colX;
+  // Kindle-style cover grid: 3 columns, up to 2 rows, covers dominant with a
+  // wrapped title beneath each. Reading order (left-to-right, top-to-bottom)
+  // matches the linear NavNext/NavPrevious selector, so navigation is unchanged
+  // from the single-hero layout: the cursor just steps cover to cover, then on
+  // into the menu rows below (selectorIndex >= bookCount frames nothing here).
+  constexpr int kGridCols = 3;
+  const int gridRows = (bookCount + kGridCols - 1) / kGridCols;  // 1 when <=3 recents, else 2
+  const int tileW = innerW / kGridCols;
+  const int rowH = rect.height / std::max(1, gridRows);
 
   const int smallLineH = renderer.getLineHeight(SMALL_FONT_ID);
-  const int titleLineH = renderer.getLineHeight(UI_12_FONT_ID);
-  const int bodyLineH = renderer.getLineHeight(UI_10_FONT_ID);
-  const int labelBandH = smallLineH + 10;
-  const int titleMaxLines = hasSecondary ? 2 : 3;
+  const int titleAreaH = 2 * smallLineH + kHomeTextGap;  // room for up to two wrapped title lines
+  const int coverSlotH = std::max(0, rowH - titleAreaH);
 
-  const int infoTop = rect.y + kHomeSlotInset;
-  const int infoH = hasSecondary ? labelBandH + kHomeTextGap + 2 * titleLineH + kHomeTextGap + bodyLineH
-                                 : rect.height - 2 * kHomeSlotInset;
-  const int secTop = infoTop + infoH + kHomeColumnGap;
-  const int secRowH = (rect.y + rect.height - secTop) / 2;
-  const int secCoverSlotW = (secRowH - 2 * kHomeSlotInset) * 2 / 3 + 2 * kHomeSlotInset;
-
-  // Covers stream from SD only until a snapshot of them is stored; afterwards
-  // the restored buffer supplies them and only text/selection is redrawn.
+  // Covers stream from SD only on the first render; the snapshot then supplies
+  // them so cursor moves redraw just the titles and the selection frame.
   if (!coverRendered || !bufferRestored) {
-    drawCoverInSlot(renderer, recentBooks[0].coverBmpPath, innerX, heroSlotY, heroSlotW, heroSlotH);
-    for (int i = 1; i < bookCount; i++) {
-      drawCoverInSlot(renderer, recentBooks[i].coverBmpPath, colX, secTop + (i - 1) * secRowH, secCoverSlotW, secRowH);
+    for (int i = 0; i < bookCount; i++) {
+      const int tileX = innerX + tileW * (i % kGridCols);
+      const int tileY = rect.y + rowH * (i / kGridCols);
+      drawCoverInSlot(renderer, recentBooks[i].coverBmpPath, tileX, tileY, tileW, coverSlotH);
     }
     coverBufferStored = storeCoverBuffer();
     coverRendered = coverBufferStored;
   }
 
-  // Text and selection are redrawn on every call over the restored snapshot;
-  // any selectorIndex >= bookCount (a menu row) draws no selection here.
+  // Titles + selection frame over the restored covers, every pass.
+  for (int i = 0; i < bookCount; i++) {
+    const int tileX = innerX + tileW * (i % kGridCols);
+    const int tileY = rect.y + rowH * (i / kGridCols);
 
-  const bool heroSelected = selectorIndex == 0;
-  const auto titleLines =
-      renderer.wrappedText(UI_12_FONT_ID, recentBooks[0].title.c_str(), colW, titleMaxLines, EpdFontFamily::BOLD);
-  const auto author = renderer.truncatedText(UI_10_FONT_ID, recentBooks[0].author.c_str(), colW);
-  const int titleBlockH = static_cast<int>(titleLines.size()) * titleLineH;
-  const int authorBlockH = author.empty() ? 0 : kHomeTextGap + bodyLineH;
-  const int blockH = labelBandH + kHomeTextGap + titleBlockH + authorBlockH;
-  int textY = infoTop + std::max(0, (infoH - blockH) / 2);
-
-  const auto continueLabel = renderer.truncatedText(SMALL_FONT_ID, tr(STR_CONTINUE_READING), colW - 2 * kHomeLabelPadX);
-  if (heroSelected) {
-    // Inverted label band carries the selection cue into the info column.
-    renderer.fillRect(colX, textY, colW, labelBandH, true);
-    renderer.drawText(SMALL_FONT_ID, colX + kHomeLabelPadX, textY + (labelBandH - smallLineH) / 2,
-                      continueLabel.c_str(), false);
-  } else {
-    renderer.drawText(SMALL_FONT_ID, colX + kHomeLabelPadX, textY + (labelBandH - smallLineH) / 2,
-                      continueLabel.c_str(), true);
-    // Sub-header motif: short heavy accent segment under the label.
-    renderer.fillRect(colX, textY + labelBandH - 3, kSubHeaderAccentWidth, 3, true);
-  }
-  textY += labelBandH + kHomeTextGap;
-
-  for (const auto& line : titleLines) {
-    renderer.drawText(UI_12_FONT_ID, colX, textY, line.c_str(), true, EpdFontFamily::BOLD);
-    textY += titleLineH;
-  }
-  if (!author.empty()) {
-    textY += kHomeTextGap;
-    renderer.drawText(UI_10_FONT_ID, colX, textY, author.c_str(), true);
-  }
-
-  if (heroSelected) {
-    drawSelectionFrame(renderer, innerX, heroSlotY, heroSlotW, heroSlotH);
-  }
-
-  for (int i = 1; i < bookCount; i++) {
-    const int rowY = secTop + (i - 1) * secRowH;
-    const bool rowSelected = selectorIndex == i;
-    const int rowTextX = colX + secCoverSlotW + kHomeTextGap;
-    const int rowTextW = colX + colW - rowTextX - kHomeSlotInset;
-
-    const auto rowTitle = renderer.wrappedText(SMALL_FONT_ID, recentBooks[i].title.c_str(), rowTextW, 2);
-    const int rowTitleH = static_cast<int>(rowTitle.size()) * smallLineH;
-    int lineY = rowY + (secRowH - rowTitleH) / 2;
-
-    if (rowSelected) {
-      renderer.fillRect(rowTextX - kHomeLabelPadX, lineY - kHomeLabelPadX, rowTextW + 2 * kHomeLabelPadX,
-                        rowTitleH + 2 * kHomeLabelPadX, true);
-      drawSelectionFrame(renderer, colX, rowY, colW, secRowH);
+    const int titleMaxW = tileW - 2 * kHomeLabelPadX;
+    const auto titleLines = renderer.wrappedText(SMALL_FONT_ID, recentBooks[i].title.c_str(), titleMaxW, 2);
+    int textY = tileY + coverSlotH + kHomeTextGap;
+    for (const auto& line : titleLines) {
+      const int lineW = renderer.getTextWidth(SMALL_FONT_ID, line.c_str());
+      renderer.drawText(SMALL_FONT_ID, tileX + (tileW - lineW) / 2, textY, line.c_str(), true);
+      textY += smallLineH;
     }
-    for (const auto& line : rowTitle) {
-      renderer.drawText(SMALL_FONT_ID, rowTextX, lineY, line.c_str(), !rowSelected);
-      lineY += smallLineH;
+
+    if (selectorIndex == i) {
+      drawSelectionFrame(renderer, tileX + kHomeFrameGap, tileY, tileW - 2 * kHomeFrameGap, coverSlotH);
     }
   }
 }
