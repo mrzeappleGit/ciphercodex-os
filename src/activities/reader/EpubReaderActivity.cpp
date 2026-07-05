@@ -31,6 +31,7 @@
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
 #include "ReadingStats.h"
+#include "util/StatsFormat.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
@@ -1271,6 +1272,17 @@ void EpubReaderActivity::renderStatusBar() const {
 
   } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
     title = epub->getTitle();
+  }
+
+  // At-a-glance "time left in chapter" appended to the status-bar title, from
+  // the device-wide reading pace (same model as the reader menu; needs no clock,
+  // no new setting). Only when a title is shown and pace history exists.
+  if (!automaticPageTurnActive && !title.empty() && section->pageCount > 0 &&
+      READING_STATS.allTimePagesTurned() > 0) {
+    const float secPerPage =
+        static_cast<float>(READING_STATS.allTimeSeconds()) / static_cast<float>(READING_STATS.allTimePagesTurned());
+    const int pagesLeft = std::max(0, static_cast<int>(section->pageCount) - currentPage);
+    title += " - " + StatsFormat::duration(static_cast<uint32_t>(pagesLeft * secPerPage));
   }
 
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, currentPageBookmarked);
