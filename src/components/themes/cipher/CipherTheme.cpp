@@ -269,7 +269,9 @@ void CipherTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount
     renderer.fillRect(rect.x, rect.y + selectedIndex % pageItems * rowHeight, rect.width, rowHeight);
   }
 
-  const int titleLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  // Comp-scale list type: titles/values at UI_12 (the comp's 17px row titles),
+  // subtitles stay small and read as the muted secondary line.
+  const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int subtitleLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
 
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
@@ -314,8 +316,8 @@ void CipherTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount
       valueText = rowValue(i);
       if (!valueText.empty()) {
         const int maxValW = std::max(0, rowTextWidth - 40 - kMinValueGap);
-        valueText = renderer.truncatedText(UI_10_FONT_ID, valueText.c_str(), maxValW);
-        rowTextWidth -= renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str()) + kMinValueGap;
+        valueText = renderer.truncatedText(UI_12_FONT_ID, valueText.c_str(), maxValW);
+        rowTextWidth -= renderer.getTextWidth(UI_12_FONT_ID, valueText.c_str()) + kMinValueGap;
       }
     }
 
@@ -323,12 +325,12 @@ void CipherTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount
                            ? itemY + (rowHeight - titleLineHeight - kSubtitleLineGap - subtitleLineHeight) / 2
                            : itemY + (rowHeight - titleLineHeight) / 2;
 
-    auto item = renderer.truncatedText(UI_10_FONT_ID, rowTitle(i).c_str(), rowTextWidth);
-    renderer.drawText(UI_10_FONT_ID, textX, titleY, item.c_str(), !isSelected);
+    auto item = renderer.truncatedText(UI_12_FONT_ID, rowTitle(i).c_str(), rowTextWidth);
+    renderer.drawText(UI_12_FONT_ID, textX, titleY, item.c_str(), !isSelected);
 
     // Checkerboard dither for dimmed rows (existing dither gray).
     if (rowDimmed && rowDimmed(i) && !isSelected) {
-      const int titleWidth = renderer.getTextWidth(UI_10_FONT_ID, item.c_str());
+      const int titleWidth = renderer.getTextWidth(UI_12_FONT_ID, item.c_str());
       for (int py = titleY; py < titleY + titleLineHeight; py++)
         for (int px = textX; px < textX + titleWidth; px++)
           if ((px + py) % 2 == 0) renderer.drawPixel(px, py, false);
@@ -344,8 +346,8 @@ void CipherTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount
     }
 
     if (!valueText.empty()) {
-      const int valueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
-      renderer.drawText(UI_10_FONT_ID, rect.x + contentWidth - metrics.contentSidePadding - valueTextWidth, titleY,
+      const int valueTextWidth = renderer.getTextWidth(UI_12_FONT_ID, valueText.c_str());
+      renderer.drawText(UI_12_FONT_ID, rect.x + contentWidth - metrics.contentSidePadding - valueTextWidth, titleY,
                         valueText.c_str(), !isSelected);
     }
   }
@@ -418,43 +420,56 @@ void CipherTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::
 
 void CipherTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                  const std::function<std::string(int index)>& buttonLabel,
-                                 const std::function<UIIcon(int index)>& rowIcon) const {
+                                 const std::function<UIIcon(int index)>& rowIcon,
+                                 const std::function<std::string(int index)>& rowSubtitle) const {
   (void)rowIcon;  // Cipher menu rows lead with the brand diamond instead of per-item icons
   const auto& metrics = CipherMetrics::values;
-  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int glyphCx = rect.x + metrics.contentSidePadding + kBookGlyphRad;
-  const int textX = rect.x + metrics.contentSidePadding + kBookGlyphCol;
+  // Comp's home cells: big two-line rows, large title + muted secondary line,
+  // brand-diamond bullet, full-bleed inversion + "▸" on the focused row, and a
+  // dotted hairline between quiet rows.
+  constexpr int kMenuGlyphRad = 9;
+  const int titleFont = NOTOSANS_16_FONT_ID;
+  const int titleLineHeight = renderer.getLineHeight(titleFont);
+  const int subLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int glyphCx = rect.x + metrics.contentSidePadding + kMenuGlyphRad;
+  const int textX = rect.x + metrics.contentSidePadding + 2 * kMenuGlyphRad + 14;
 
   for (int i = 0; i < buttonCount; ++i) {
     const int rowY = rect.y + metrics.verticalSpacing + i * (metrics.menuRowHeight + metrics.menuSpacing);
     const bool isSelected = selectedIndex == i;
     const int rowCy = rowY + metrics.menuRowHeight / 2;
 
-    // Selection is full-row inversion (same language as drawList); unselected
-    // rows are quiet left-aligned entries with a hollow diamond bullet and a
-    // comp-style dotted hairline beneath.
+    const std::string labelStr = buttonLabel(i);
+    const std::string subStr = rowSubtitle ? rowSubtitle(i) : std::string();
+    const bool hasSub = !subStr.empty();
+
+    // Text block vertically centered as a whole (title alone, or title+sub).
+    const int blockH = hasSub ? titleLineHeight + kSubtitleLineGap + subLineHeight : titleLineHeight;
+    const int titleY = rowY + (metrics.menuRowHeight - blockH) / 2;
+
     if (isSelected) {
-      renderer.fillRect(rect.x + metrics.contentSidePadding, rowY, rect.width - 2 * metrics.contentSidePadding,
-                        metrics.menuRowHeight, true);
-      CipherEmblem::drawGlyph(renderer, glyphCx, rowCy, kBookGlyphRad - 1, false);
-      // "▸" affordance at the row's right edge (comp's focused home cell).
-      const int arrowX = rect.x + rect.width - metrics.contentSidePadding - 16;
-      const int xs[3] = {arrowX, arrowX + 8, arrowX};
-      const int ys[3] = {rowCy - 6, rowCy, rowCy + 6};
+      // Full-bleed inverted cell, edge to edge like the comp.
+      renderer.fillRect(rect.x, rowY, rect.width, metrics.menuRowHeight, true);
+      CipherEmblem::drawGlyph(renderer, glyphCx, rowCy, kMenuGlyphRad - 1, false);
+      const int arrowX = rect.x + rect.width - metrics.contentSidePadding - 12;
+      const int xs[3] = {arrowX, arrowX + 9, arrowX};
+      const int ys[3] = {rowCy - 7, rowCy, rowCy + 7};
       renderer.fillPolygon(xs, ys, 3, false);
     } else {
-      CipherEmblem::strokeDiamond(renderer, glyphCx, rowCy, kBookGlyphRad - 1, 1, true);
+      CipherEmblem::strokeDiamond(renderer, glyphCx, rowCy, kMenuGlyphRad - 1, 1, true);
       if (i < buttonCount - 1) {
-        drawDottedRule(renderer, rect.x + metrics.contentSidePadding, rowY + metrics.menuRowHeight + metrics.menuSpacing / 2,
+        drawDottedRule(renderer, rect.x + metrics.contentSidePadding, rowY + metrics.menuRowHeight - 1,
                        rect.width - 2 * metrics.contentSidePadding);
       }
     }
 
-    const std::string labelStr = buttonLabel(i);
-    const auto label = renderer.truncatedText(UI_10_FONT_ID, labelStr.c_str(),
-                                              rect.width - textX - metrics.contentSidePadding - 24);
-    renderer.drawText(UI_10_FONT_ID, textX, rowY + (metrics.menuRowHeight - lineHeight) / 2, label.c_str(),
-                      !isSelected);
+    const int textW = rect.width - (textX - rect.x) - metrics.contentSidePadding - 28;
+    const auto label = renderer.truncatedText(titleFont, labelStr.c_str(), textW, EpdFontFamily::BOLD);
+    renderer.drawText(titleFont, textX, titleY, label.c_str(), !isSelected, EpdFontFamily::BOLD);
+    if (hasSub) {
+      const auto sub = renderer.truncatedText(SMALL_FONT_ID, subStr.c_str(), textW);
+      renderer.drawText(SMALL_FONT_ID, textX, titleY + titleLineHeight + kSubtitleLineGap, sub.c_str(), !isSelected);
+    }
   }
 }
 
@@ -525,6 +540,9 @@ void CipherTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title
 void CipherTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                       const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                       bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
+  // Comp home has no cover region (continue-reading lives in the menu); the
+  // activity still calls this with the metric-driven zero-height tile.
+  if (rect.height <= 0) return;
   if (recentBooks.empty()) {
     // Pure vector drawing, cheap to redraw each pass: no snapshot needed.
     drawEmptyRecentsPanel(renderer, rect);

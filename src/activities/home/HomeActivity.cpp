@@ -236,20 +236,26 @@ void HomeActivity::render(RenderLock&&) {
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
-  // Build menu items dynamically
+  // Build menu items dynamically (subtitles feed themes that render a second
+  // line — the classic menu ignores them).
   std::vector<const char*> menuItems = {tr(STR_ALL_BOOKS), tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS),
                                         tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Book, Folder, Recent, Transfer, Settings};
+  std::vector<std::string> menuSubtitles = {tr(STR_HOME_SUB_ALL_BOOKS), tr(STR_HOME_SUB_BROWSE),
+                                            tr(STR_HOME_SUB_RECENTS), tr(STR_HOME_SUB_TRANSFER),
+                                            tr(STR_HOME_SUB_SETTINGS)};
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 3, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 3, Library);
+    menuSubtitles.insert(menuSubtitles.begin() + 3, tr(STR_HOME_SUB_OPDS));
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
     // Insert Continue Reading at the top if enabled in theme
     menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
     menuIcons.insert(menuIcons.begin(), Book);
+    menuSubtitles.insert(menuSubtitles.begin(), recentBooks[0].title);
   }
 
   GUI.drawButtonMenu(
@@ -260,7 +266,8 @@ void HomeActivity::render(RenderLock&&) {
       static_cast<int>(menuItems.size()),
       metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
-      [&menuIcons](int index) { return menuIcons[index]; });
+      [&menuIcons](int index) { return menuIcons[index]; },
+      [&menuSubtitles](int index) { return menuSubtitles[index]; });
 
   const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

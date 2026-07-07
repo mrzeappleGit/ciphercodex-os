@@ -244,9 +244,12 @@ class BaseTheme {
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
+  // rowSubtitle is optional; the base (Classic) menu ignores it and themes
+  // that render a second line (Cipher) consume it.
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
-                              const std::function<UIIcon(int index)>& rowIcon) const;
+                              const std::function<UIIcon(int index)>& rowIcon,
+                              const std::function<std::string(int index)>& rowSubtitle = nullptr) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                int selectedIndex) const;
