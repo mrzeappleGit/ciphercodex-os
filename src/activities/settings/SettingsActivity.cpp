@@ -57,13 +57,15 @@ void SettingsActivity::rebuildSettingsLists() {
     }
   }
 
-  // Append device-only ACTION items
+  // Append device-only ACTION items. Daily-use actions lead the System list;
+  // the set-once library toggles sit in the middle and maintenance trails.
   controlsSettings.insert(controlsSettings.begin(),
                           SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_READING_STATS, SettingAction::ReadingStats));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
+  systemSettings.insert(systemSettings.begin(),
+                        {SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network),
+                         SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync),
+                         SettingInfo::Action(StrId::STR_READING_STATS, SettingAction::ReadingStats),
+                         SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser)});
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
@@ -133,13 +135,9 @@ void SettingsActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    if (selectedSettingIndex > 0) {
-      selectedSettingIndex = 0;
-      requestUpdate();
-    } else {
-      SETTINGS.saveToFile();
-      onGoHome();
-    }
+    // Single-press exit from anywhere, matching every other activity.
+    SETTINGS.saveToFile();
+    onGoHome();
     return;
   }
 
@@ -154,15 +152,28 @@ void SettingsActivity::loop() {
     requestUpdate();
   });
 
+  // Held press accelerates whatever is focused: on the tab row it cycles
+  // categories; inside the list it pages, like every other list activity.
   buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
+    if (selectedSettingIndex == 0) {
+      hasChangedCategory = true;
+      selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
+    } else {
+      const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, true, true, false);
+      selectedSettingIndex = 1 + ButtonNavigator::nextPageIndex(selectedSettingIndex - 1, settingsCount, pageItems);
+    }
     requestUpdate();
   });
 
   buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
+    if (selectedSettingIndex == 0) {
+      hasChangedCategory = true;
+      selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
+    } else {
+      const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, true, true, false);
+      selectedSettingIndex =
+          1 + ButtonNavigator::previousPageIndex(selectedSettingIndex - 1, settingsCount, pageItems);
+    }
     requestUpdate();
   });
 
