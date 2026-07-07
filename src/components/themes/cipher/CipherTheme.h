@@ -6,9 +6,11 @@ class GfxRenderer;
 
 // Cipher theme metrics (zero runtime cost).
 // Monochrome translation of the CipherCodex brand: angular geometry (all corner
-// radii 0), inverted selection, solid black header band. Values that BaseTheme
-// methods hardcode via BaseMetrics (menu, side hints) stay equal to
-// BaseMetrics so un-overridden base drawing remains consistent with activities.
+// radii 0), inverted selection, solid black header band. Rows are deliberately
+// tighter than BaseMetrics so more items fit per page (fewer page turns on a
+// button-nav device). Values that BaseTheme methods hardcode via BaseMetrics
+// (side hints) stay equal to BaseMetrics so un-overridden base drawing remains
+// consistent with activities.
 namespace CipherMetrics {
 constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .batteryHeight = 12,
@@ -19,12 +21,12 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .previewPadding = 12,
                                  .previewHeightPercent = 30,
                                  .contentSidePadding = 20,
-                                 .listRowHeight = 40,
-                                 .listWithSubtitleRowHeight = 64,
-                                 .menuRowHeight = 45,
-                                 .menuSpacing = 8,
+                                 .listRowHeight = 34,
+                                 .listWithSubtitleRowHeight = 56,
+                                 .menuRowHeight = 40,
+                                 .menuSpacing = 6,
                                  .tabSpacing = 10,
-                                 .tabBarHeight = 50,
+                                 .tabBarHeight = 42,
                                  .scrollBarWidth = 4,
                                  .scrollBarRightOffset = 5,
                                  .homeTopPadding = 40,
@@ -102,6 +104,11 @@ class CipherTheme : public BaseTheme {
                 const std::function<bool(int index)>& rowDimmed = nullptr) const override;
   void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                        const char* btn4) const override;
+  void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
+                  bool selected) const override;
+  void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
+                      const std::function<std::string(int index)>& buttonLabel,
+                      const std::function<UIIcon(int index)>& rowIcon) const override;
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            const int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                            std::function<bool()> storeCoverBuffer) const override;

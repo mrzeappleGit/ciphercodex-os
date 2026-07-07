@@ -374,6 +374,68 @@ void CipherTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const
   renderer.setOrientation(origOrientation);
 }
 
+void CipherTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
+                             bool selected) const {
+  // Active category as a solid black chip (echoes the header band and button
+  // hints); when the tab row itself has focus, the chip gains the double-frame
+  // selection motif used on home covers.
+  constexpr int kChipPadX = 8;
+  constexpr int kChipPadY = 4;
+  constexpr int kFocusGap = 3;
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int chipH = lineHeight + 2 * kChipPadY;
+  const int chipY = rect.y + (rect.height - chipH) / 2;
+
+  int currentX = rect.x + CipherMetrics::values.contentSidePadding;
+  for (const auto& tab : tabs) {
+    const auto style = tab.selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+    const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, tab.label, style);
+    const int chipW = textWidth + 2 * kChipPadX;
+
+    if (tab.selected) {
+      renderer.fillRect(currentX, chipY, chipW, chipH, true);
+      if (selected) {
+        renderer.drawRect(currentX - kFocusGap, chipY - kFocusGap, chipW + 2 * kFocusGap, chipH + 2 * kFocusGap, 1,
+                          true);
+      }
+    }
+    renderer.drawText(UI_12_FONT_ID, currentX + kChipPadX, chipY + kChipPadY, tab.label, !tab.selected, style);
+    currentX += chipW + CipherMetrics::values.tabSpacing;
+  }
+}
+
+void CipherTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
+                                 const std::function<std::string(int index)>& buttonLabel,
+                                 const std::function<UIIcon(int index)>& rowIcon) const {
+  (void)rowIcon;  // Cipher menu rows lead with the brand diamond instead of per-item icons
+  const auto& metrics = CipherMetrics::values;
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int glyphCx = rect.x + metrics.contentSidePadding + kBookGlyphRad;
+  const int textX = rect.x + metrics.contentSidePadding + kBookGlyphCol;
+
+  for (int i = 0; i < buttonCount; ++i) {
+    const int rowY = rect.y + metrics.verticalSpacing + i * (metrics.menuRowHeight + metrics.menuSpacing);
+    const bool isSelected = selectedIndex == i;
+    const int rowCy = rowY + metrics.menuRowHeight / 2;
+
+    // Selection is full-row inversion (same language as drawList); unselected
+    // rows are quiet left-aligned entries with a hollow diamond bullet.
+    if (isSelected) {
+      renderer.fillRect(rect.x + metrics.contentSidePadding, rowY, rect.width - 2 * metrics.contentSidePadding,
+                        metrics.menuRowHeight, true);
+      CipherEmblem::drawGlyph(renderer, glyphCx, rowCy, kBookGlyphRad - 1, false);
+    } else {
+      CipherEmblem::strokeDiamond(renderer, glyphCx, rowCy, kBookGlyphRad - 1, 1, true);
+    }
+
+    const std::string labelStr = buttonLabel(i);
+    const auto label =
+        renderer.truncatedText(UI_10_FONT_ID, labelStr.c_str(), rect.width - textX - metrics.contentSidePadding);
+    renderer.drawText(UI_10_FONT_ID, textX, rowY + (metrics.menuRowHeight - lineHeight) / 2, label.c_str(),
+                      !isSelected);
+  }
+}
+
 void CipherTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title,
                                   const std::vector<std::string>& options, int selectedIndex) const {
   const auto& metrics = CipherMetrics::values;
