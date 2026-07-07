@@ -26,8 +26,7 @@ constexpr int kGlyphBarGap = 2;
 constexpr int kGlyphWidth = 24;
 constexpr int kGlyphHeight = kGlyphBarCount * kGlyphBarHeight + (kGlyphBarCount - 1) * kGlyphBarGap;
 
-constexpr int kHeaderTextGap = 12;  // Gap between glyph/chamfer and header text
-constexpr int kSubHeaderAccentWidth = 56;
+constexpr int kHeaderTextGap = 12;  // Gap between glyph and header text
 constexpr int kMaxHeaderSubtitleWidth = 200;
 constexpr int kMinValueGap = 10;
 constexpr int kSubtitleLineGap = 2;
@@ -118,6 +117,14 @@ void drawSelectionFrame(const GfxRenderer& renderer, int x, int y, int w, int h)
   renderer.drawRect(x + kHomeFrameGap, y + kHomeFrameGap, w - 2 * kHomeFrameGap, h - 2 * kHomeFrameGap, 1, true);
 }
 
+// Dotted 1px hairline: the design comp's light-gray row divider rendered on a
+// 1-bit panel (every other pixel reads as a soft rule at e-ink density).
+void drawDottedRule(const GfxRenderer& renderer, int x, int y, int width) {
+  for (int px = x; px < x + width; px += 2) {
+    renderer.drawPixel(px, y, true);
+  }
+}
+
 // Empty state: square-bordered panel with an inverted title band, echoing the
 // header's black band + glyph motif.
 void drawEmptyRecentsPanel(const GfxRenderer& renderer, Rect rect) {
@@ -150,25 +157,19 @@ void drawEmptyRecentsPanel(const GfxRenderer& renderer, Rect rect) {
 void CipherTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
   const auto& metrics = CipherMetrics::values;
 
-  // Solid black brand band; repainting it fully also clears the previous
-  // battery draw, so no explicit clear rect is needed.
-  renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+  // Design-comp status bar: slim paper-white band, "◆ TITLE" on the left,
+  // subtitle + battery cluster on the right, a single hairline rule beneath.
+  // The full repaint also clears the previous battery draw.
+  renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
+  renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
 
-  // White notch at the right end of the band holds the standard black-on-white
-  // battery cluster; a 45-degree chamfer between band and notch echoes the
-  // octagonal frame motif.
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   const int batteryX = rect.x + rect.width - 12 - metrics.batteryWidth;
-  int notchX = batteryX - 8;
+  int batteryLeft = batteryX - 8;
   if (showBatteryPercentage) {
-    notchX -= renderer.getTextWidth(SMALL_FONT_ID, "100%") + batteryPercentSpacing;
+    batteryLeft -= renderer.getTextWidth(SMALL_FONT_ID, "100%") + batteryPercentSpacing;
   }
-  renderer.fillRect(notchX, rect.y, rect.x + rect.width - notchX, rect.height, false);
-  const int chamfer = rect.height;
-  const int xPoints[3] = {notchX - chamfer, notchX, notchX};
-  const int yPoints[3] = {rect.y, rect.y, rect.y + rect.height - 1};
-  renderer.fillPolygon(xPoints, yPoints, 3, false);
 
   // drawBatteryRight places the icon at y+6 (icon height = batteryHeight), so
   // offset by -6 to center the icon within the band.
@@ -176,14 +177,14 @@ void CipherTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char*
   drawBatteryRight(renderer, Rect{batteryX, batteryY, metrics.batteryWidth, metrics.batteryHeight},
                    showBatteryPercentage);
 
-  // Daemon-OS wordmark diamond (the "◆"): a small white token on the black
-  // band, tying every header to the boot/sleep emblem. Occupies a kGlyphWidth
-  // slot so the title offset is unchanged.
+  // Daemon-OS wordmark diamond (the "◆"), tying every header to the
+  // boot/sleep emblem.
+  constexpr int kHeaderGlyphRad = 7;
   const int glyphX = rect.x + metrics.contentSidePadding;
-  CipherEmblem::drawGlyph(renderer, glyphX + kGlyphWidth / 2, rect.y + rect.height / 2, kGlyphWidth / 2 - 2, false);
+  CipherEmblem::drawGlyph(renderer, glyphX + kHeaderGlyphRad, rect.y + rect.height / 2, kHeaderGlyphRad, true);
 
-  const int textLeft = glyphX + kGlyphWidth + kHeaderTextGap;
-  const int textRight = notchX - chamfer - kHeaderTextGap;
+  const int textLeft = glyphX + 2 * kHeaderGlyphRad + kHeaderTextGap;
+  const int textRight = batteryLeft - kHeaderTextGap;
 
   int subtitleWidth = 0;
   std::string truncatedSubtitle;
@@ -198,14 +199,14 @@ void CipherTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char*
     if (maxTitleWidth > 0) {
       auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
       renderer.drawText(UI_12_FONT_ID, textLeft, rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2,
-                        truncatedTitle.c_str(), false, EpdFontFamily::BOLD);
+                        truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
     }
   }
 
   if (subtitleWidth > 0) {
     renderer.drawText(SMALL_FONT_ID, textRight - subtitleWidth,
                       rect.y + (rect.height - renderer.getLineHeight(SMALL_FONT_ID)) / 2, truncatedSubtitle.c_str(),
-                      false);
+                      true);
   }
 }
 
@@ -213,12 +214,11 @@ void CipherTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const ch
                                 const char* rightLabel) const {
   BaseTheme::drawSubHeader(renderer, rect, label, rightLabel);
 
-  // Thin rule with a short heavy segment at the left: the brand's gradient
-  // rule rendered as weight contrast.
+  // Design-comp hairline: a plain full-width 1px rule under the sub-header
+  // (the earlier heavy accent segment dropped for the comp's quieter chrome).
   const int sidePadding = CipherMetrics::values.contentSidePadding;
-  const int ruleY = rect.y + rect.height - 3;
+  const int ruleY = rect.y + rect.height - 2;
   renderer.drawLine(rect.x + sidePadding, ruleY, rect.x + rect.width - sidePadding - 1, ruleY, true);
-  renderer.fillRect(rect.x + sidePadding, ruleY - 1, kSubHeaderAccentWidth, 3, true);
 }
 
 int CipherTheme::getListPageItems(int contentHeight, bool hasSubtitle) const {
@@ -294,6 +294,13 @@ void CipherTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount
     const bool isSelected = i == selectedIndex;
     const int textX = rect.x + metrics.contentSidePadding + glyphCol;
 
+    // Comp-style hairline between rows (the inverted selection carries its own
+    // edge, so skip it there and on the last row of the page).
+    if (!isSelected && i < itemCount - 1 && (i + 1) % pageItems != 0) {
+      drawDottedRule(renderer, rect.x + metrics.contentSidePadding, itemY + rowHeight - 1,
+                     rect.width - 2 * metrics.contentSidePadding);
+    }
+
     const int slot = i - pageStartIndex;
     const UIIcon rowGlyph = slot < kMaxVisibleRows ? visibleIcons[slot] : UIIcon::None;
     if (glyphCol > 0 && (rowGlyph == UIIcon::BookNew || rowGlyph == UIIcon::BookReading)) {
@@ -349,25 +356,30 @@ void CipherTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const
   const GfxRenderer::Orientation origOrientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
+  const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
   constexpr int buttonWidth = 106;
   constexpr int buttonHeight = CipherMetrics::values.buttonHintsHeight;
-  constexpr int buttonY = CipherMetrics::values.buttonHintsHeight;  // Distance from bottom
-  constexpr int textYOffset = 7;
+  constexpr int textYOffset = 12;
   // X3 has wider screen in portrait (528 vs 480), use more spacing
   constexpr int x4ButtonPositions[] = {25, 130, 245, 350};
   constexpr int x3ButtonPositions[] = {38, 154, 268, 384};
   const int* buttonPositions = gpio.deviceIsX3() ? x3ButtonPositions : x4ButtonPositions;
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
+  // Design-comp button legend: a quiet text row over a single hairline rule
+  // (replaces the solid inverted chips). Slots stay aligned to the physical
+  // front buttons below the glass.
+  const int bandTop = pageHeight - buttonHeight;
+  renderer.fillRect(0, bandTop, pageWidth, buttonHeight, false);
+  renderer.drawLine(0, bandTop, pageWidth - 1, bandTop, true);
+
   for (int i = 0; i < 4; i++) {
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       const int x = buttonPositions[i];
-      // Inverted chip: solid black, white label, square corners.
-      renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, true);
       const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
       const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(UI_10_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i], false);
+      renderer.drawText(UI_10_FONT_ID, textX, bandTop + textYOffset, labels[i], true);
     }
   }
 
@@ -419,18 +431,28 @@ void CipherTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCou
     const int rowCy = rowY + metrics.menuRowHeight / 2;
 
     // Selection is full-row inversion (same language as drawList); unselected
-    // rows are quiet left-aligned entries with a hollow diamond bullet.
+    // rows are quiet left-aligned entries with a hollow diamond bullet and a
+    // comp-style dotted hairline beneath.
     if (isSelected) {
       renderer.fillRect(rect.x + metrics.contentSidePadding, rowY, rect.width - 2 * metrics.contentSidePadding,
                         metrics.menuRowHeight, true);
       CipherEmblem::drawGlyph(renderer, glyphCx, rowCy, kBookGlyphRad - 1, false);
+      // "▸" affordance at the row's right edge (comp's focused home cell).
+      const int arrowX = rect.x + rect.width - metrics.contentSidePadding - 16;
+      const int xs[3] = {arrowX, arrowX + 8, arrowX};
+      const int ys[3] = {rowCy - 6, rowCy, rowCy + 6};
+      renderer.fillPolygon(xs, ys, 3, false);
     } else {
       CipherEmblem::strokeDiamond(renderer, glyphCx, rowCy, kBookGlyphRad - 1, 1, true);
+      if (i < buttonCount - 1) {
+        drawDottedRule(renderer, rect.x + metrics.contentSidePadding, rowY + metrics.menuRowHeight + metrics.menuSpacing / 2,
+                       rect.width - 2 * metrics.contentSidePadding);
+      }
     }
 
     const std::string labelStr = buttonLabel(i);
-    const auto label =
-        renderer.truncatedText(UI_10_FONT_ID, labelStr.c_str(), rect.width - textX - metrics.contentSidePadding);
+    const auto label = renderer.truncatedText(UI_10_FONT_ID, labelStr.c_str(),
+                                              rect.width - textX - metrics.contentSidePadding - 24);
     renderer.drawText(UI_10_FONT_ID, textX, rowY + (metrics.menuRowHeight - lineHeight) / 2, label.c_str(),
                       !isSelected);
   }
