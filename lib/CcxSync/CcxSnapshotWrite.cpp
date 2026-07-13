@@ -33,7 +33,8 @@ void CcxSnapshotWrite::enterSection(Section target) {
         section_ = Section::BOOKMARKS;
         break;
       default:
-        return;  // NONE (not begun) or already at/past BOOKMARKS
+        ok_ = false;  // begin() not called, or a backward/out-of-order section call
+        return;
     }
     firstInSection_ = true;
   }
@@ -94,7 +95,7 @@ void CcxSnapshotWrite::addProgress(const ccxsync::MergedProgress& p) {
   doc["spineIndex"] = p.spineIndex;
   doc["charOffset"] = 0;  // X4 tracks spineIndex/percentage only; wire slot kept for cross-device compat
   doc["percentage"] = p.percentage;
-  doc["deleted"] = p.deleted;
+  doc["deleted"] = 0;  // frozen contract: progress tombstones don't exist on the wire
   doc["updatedAt"] = p.updatedAt;
 
   char buf[512];
