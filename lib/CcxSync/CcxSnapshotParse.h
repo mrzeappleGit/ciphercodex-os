@@ -4,7 +4,7 @@
 #include <string>
 
 #include "CcxMerge.h"
-#include "JsonParser/StreamingJsonParser.h"
+#include "StreamingJsonParser.h"
 
 // SAX fold of a device snapshot into the merge accumulator. Tracks which
 // top-level array it is inside (books/progress/bookmarks — everything else,

@@ -1,5 +1,6 @@
 #include "EpubReaderActivity.h"
 
+#include <CcxSyncState.h>
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
 #include <FontCacheManager.h>
@@ -186,6 +187,25 @@ void EpubReaderActivity::onEnter() {
       cachedChapterTotalPageCount = data[4] + (data[5] << 8);
     }
   }
+
+  // A sync run may have left a remote-won position pending (LWW: the remote
+  // edit is newer than anything saved locally). Apply it now, before any
+  // first-open heuristics below, then clear the pending marker so it's only
+  // consumed once. v1 approximation: spine start, not the exact page.
+  {
+    CcxBookState syncState;
+    if (CcxSyncState::loadBook(epub->getCachePath(), syncState) && syncState.pendSpine >= 0 &&
+        syncState.pendAt > syncState.localStamp) {
+      currentSpineIndex = syncState.pendSpine;
+      nextPageNumber = 0;
+      cachedSpineIndex = currentSpineIndex;
+      LOG_INF("CCXSYNC", "applied synced position: spine %d", currentSpineIndex);
+      syncState.pendSpine = -1;
+      syncState.pendAt = 0;
+      CcxSyncState::saveBook(epub->getCachePath(), syncState);
+    }
+  }
+
   // We may want a better condition to detect if we are opening for the first time.
   // This will trigger if the book is re-opened at Chapter 0.
   if (currentSpineIndex == 0) {
@@ -212,6 +232,9 @@ void EpubReaderActivity::onExit() {
   Activity::onExit();
 
   READING_STATS.onReaderExit();
+  if (epub) {
+    CcxSyncState::markProgressDirty(epub->getCachePath());
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -1417,6 +1440,7 @@ void EpubReaderActivity::addBookmark() {
   if (!ok) {
     LOG_ERR("ERS", "Failed to save bookmarks to: %s", path.c_str());
   }
+  CcxSyncState::markBookmarksDirty(epub->getCachePath());
   requestUpdate();
 }
 

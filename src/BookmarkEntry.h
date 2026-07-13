@@ -11,4 +11,9 @@ struct BookmarkEntry {
   uint16_t computedSpineIndex = 0;        // Spine index at the time of bookmarking
   uint16_t computedChapterPageCount = 0;  // Total page count of the chapter at the time of bookmarking
   uint16_t computedChapterProgress = 0;   // Number of pages into the chapter at the time of bookmarking
+
+  // CipherCodex WebDAV sync (optional; empty/0 for entries never touched by sync).
+  // guid is the row's stable wire identity; updatedAt is the LWW stamp.
+  std::string guid;
+  long long updatedAt = 0;
 };

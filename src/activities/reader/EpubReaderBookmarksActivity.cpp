@@ -1,5 +1,6 @@
 #include "EpubReaderBookmarksActivity.h"
 
+#include <CcxSyncState.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -78,6 +79,9 @@ void EpubReaderBookmarksActivity::loop() {
       Storage.mkdir(BookmarkUtil::getBookmarksDir().c_str());
       if (!JsonSettingsIO::saveBookmarks(bookmarks, path.c_str())) {
         LOG_ERR("EPB", "Failed to save bookmarks after delete");
+      }
+      if (epub) {
+        CcxSyncState::markBookmarksDirty(epub->getCachePath());
       }
 
       // Move selector up if we deleted the last item
