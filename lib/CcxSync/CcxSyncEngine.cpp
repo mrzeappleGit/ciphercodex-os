@@ -405,14 +405,21 @@ CcxSyncEngine::Summary CcxSyncEngine::run(PhaseFn onPhase, void* ctx, bool* canc
         b.state.dirtyProgress = false;
         stateChanged = true;
       }
+      // Normalize guid-less entries (pre-feature bookmarks) unconditionally:
+      // PUSH skips entries without a guid, so gating this behind dirtyBookmarks
+      // would exclude a user's existing bookmark library from sync forever.
+      // Only guid-less entries are stamped here; entries that already carry a
+      // guid keep their updatedAt.
+      for (auto& e : entries) {
+        if (!e.guid.empty()) continue;
+        e.guid = CcxSyncState::newGuid();
+        e.updatedAt = now;
+        bmChanged = true;
+      }
       if (b.state.dirtyBookmarks) {
         // v1 approximation: X4 can't tell which entry changed, so every entry
-        // in a dirty file is re-stamped; entries missing a guid (pre-Task-6
-        // bookmarks) mint one now.
-        for (auto& e : entries) {
-          if (e.guid.empty()) e.guid = CcxSyncState::newGuid();
-          e.updatedAt = now;
-        }
+        // in a dirty file is re-stamped.
+        for (auto& e : entries) e.updatedAt = now;
         bmChanged = true;
         b.state.dirtyBookmarks = false;
         stateChanged = true;
@@ -555,7 +562,7 @@ CcxSyncEngine::Summary CcxSyncEngine::run(PhaseFn onPhase, void* ctx, bool* canc
     std::vector<BookmarkEntry> entries;
     JsonSettingsIO::loadBookmarks(entries, json.c_str());
     for (const auto& e : entries) {
-      if (e.guid.empty()) continue;  // never synced (pre-guid, never resaved this run) -- skip
+      if (e.guid.empty()) continue;  // defensive backstop; APPLY normalization mints guids for all entries
       ccxsync::MergedBookmark mm;
       mm.guid = e.guid;
       mm.bookDigest = b.state.digest;
