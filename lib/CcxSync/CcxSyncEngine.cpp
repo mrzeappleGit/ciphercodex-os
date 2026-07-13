@@ -32,6 +32,9 @@ namespace {
 
 constexpr int MAX_DIRS = 400;             // AllBooksActivity::loadBooks bounds, epub-only here
 constexpr size_t MAX_QUEUED_DIRS = 512;
+// ponytail: 800-book scan + 400-cap accumulator ~= 300KB worst case vs 380KB
+// ceiling; lower MAX_BOOKS or slim LocalBook (drop duplicated state.path) if
+// Task 8 heap floor < 40KB.
 constexpr size_t MAX_BOOKS = 800;
 constexpr size_t NAME_BUFFER_SIZE = 256;
 constexpr long long MIN_VALID_CLOCK_S = 1577836800LL;  // 2020-01-01, backstop against an unset RTC
@@ -49,6 +52,13 @@ void report(CcxSyncEngine::PhaseFn onPhase, void* ctx, CcxSyncEngine::Phase phas
 bool isTombstoned(const std::string& digest) {
   for (const auto& t : CCXSYNC_STATE.tombstones) {
     if (t.guid.empty() && t.digest == digest) return true;
+  }
+  return false;
+}
+
+bool isBookmarkTombstoned(const std::string& guid) {
+  for (const auto& t : CCXSYNC_STATE.tombstones) {
+    if (!t.guid.empty() && t.guid == guid) return true;
   }
   return false;
 }
@@ -249,7 +259,10 @@ CcxSyncEngine::Summary CcxSyncEngine::run(PhaseFn onPhase, void* ctx, bool* canc
     return sum;
   }
   std::vector<std::string> remoteBooks;
-  dav.list("books/", remoteBooks, 1000);
+  if (!dav.list("books/", remoteBooks, 1000)) {
+    sum.error = "list books failed";
+    return sum;
+  }
 
   int upTotal = 0;
   for (const auto& b : localBooks) {
@@ -278,7 +291,10 @@ CcxSyncEngine::Summary CcxSyncEngine::run(PhaseFn onPhase, void* ctx, bool* canc
   // ---- PULL ----
   report(onPhase, ctx, Phase::PULL, 0, 0);
   std::vector<std::string> stateNames;
-  dav.list("state/", stateNames, 32);
+  if (!dav.list("state/", stateNames, 32)) {
+    sum.error = "list state failed";
+    return sum;
+  }
 
   ccxsync::Accumulator acc;
   {
@@ -353,6 +369,25 @@ CcxSyncEngine::Summary CcxSyncEngine::run(PhaseFn onPhase, void* ctx, bool* canc
       }
       bool bmChanged = false;
 
+      // Local bookmark deletions since last sync: a guid we tracked in bmGuids
+      // that no longer has a matching entry (in the file as loaded, before any
+      // remote-apply mutation below) was removed locally. Must run BEFORE the
+      // remote-apply loop below -- otherwise a still-live remote row for that
+      // guid gets re-inserted first and this scan never sees the gap
+      // (resurrection: the deletion is lost and the row propagates back out
+      // on the next PUSH).
+      for (const auto& g : b.state.bmGuids) {
+        const bool stillThere =
+            std::any_of(entries.begin(), entries.end(), [&](const BookmarkEntry& e) { return e.guid == g; });
+        if (stillThere) continue;
+        if (isBookmarkTombstoned(g)) continue;
+        CcxSyncState::Tombstone t;
+        t.guid = g;
+        t.digest = b.state.digest;
+        t.at = now;
+        CCXSYNC_STATE.tombstones.push_back(t);
+      }
+
       for (const auto& mm : acc.bookmarks()) {
         if (mm.bookDigest != b.state.digest) continue;
         auto it = std::find_if(entries.begin(), entries.end(),
@@ -364,6 +399,7 @@ CcxSyncEngine::Summary CcxSyncEngine::run(PhaseFn onPhase, void* ctx, bool* canc
           }
           continue;
         }
+        if (isBookmarkTombstoned(mm.guid)) continue;  // locally deleted -- don't resurrect a stale/remote-pushed row
         const bool shouldWrite = (it == entries.end()) || ccxsync::wins(mm.updatedAt, 0, it->updatedAt, 0);
         if (!shouldWrite) continue;
         BookmarkEntry entry;
@@ -380,24 +416,6 @@ CcxSyncEngine::Summary CcxSyncEngine::run(PhaseFn onPhase, void* ctx, bool* canc
           entries.push_back(entry);
         }
         bmChanged = true;
-      }
-
-      // Local bookmark deletions since last sync: a guid we tracked in bmGuids
-      // that no longer has a matching entry was removed locally (not by a
-      // remote tombstone, which would already be reflected above).
-      for (const auto& g : b.state.bmGuids) {
-        const bool stillThere =
-            std::any_of(entries.begin(), entries.end(), [&](const BookmarkEntry& e) { return e.guid == g; });
-        if (stillThere) continue;
-        const bool alreadyTombstoned = std::any_of(
-            CCXSYNC_STATE.tombstones.begin(), CCXSYNC_STATE.tombstones.end(),
-            [&](const CcxSyncState::Tombstone& t) { return t.guid == g; });
-        if (alreadyTombstoned) continue;
-        CcxSyncState::Tombstone t;
-        t.guid = g;
-        t.digest = b.state.digest;
-        t.at = now;
-        CCXSYNC_STATE.tombstones.push_back(t);
       }
 
       if (b.state.dirtyProgress) {
@@ -512,7 +530,7 @@ CcxSyncEngine::Summary CcxSyncEngine::run(PhaseFn onPhase, void* ctx, bool* canc
     ccxsync::MergedBook mb;
     mb.digest = b.state.digest;
     mb.guid = b.state.guid;
-    mb.title = bookTitleFromPath(b.path);
+    mb.title = bookTitleFromPath(b.path).substr(0, 64);  // matches parse-side cap (CcxSnapshotParse::setStr)
     mb.deleted = 0;
     mb.format = 1;
     writer.addBook(mb, b.state.firstSeenAt);
