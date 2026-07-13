@@ -20,14 +20,16 @@ bool CcxSnapshotWrite::writeRaw(const char* s, size_t len) {
 }
 
 void CcxSnapshotWrite::enterSection(Section target) {
+  static constexpr char TO_PROGRESS[] = "],\"progress\":[";
+  static constexpr char TO_BOOKMARKS[] = "],\"bookmarks\":[";
   while (ok_ && section_ != target) {
     switch (section_) {
       case Section::BOOKS:
-        writeRaw("],\"progress\":[", 15);
+        writeRaw(TO_PROGRESS, sizeof(TO_PROGRESS) - 1);
         section_ = Section::PROGRESS;
         break;
       case Section::PROGRESS:
-        writeRaw("],\"bookmarks\":[", 16);
+        writeRaw(TO_BOOKMARKS, sizeof(TO_BOOKMARKS) - 1);
         section_ = Section::BOOKMARKS;
         break;
       default:
