@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "ButtonRemapActivity.h"
+#include "CcxSyncSettingsActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
@@ -64,6 +65,7 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.insert(systemSettings.begin(),
                         {SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network),
                          SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync),
+                         SettingInfo::Action(StrId::STR_CCXSYNC_TITLE, SettingAction::CcxSync),
                          SettingInfo::Action(StrId::STR_READING_STATS, SettingAction::ReadingStats),
                          SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser)});
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
@@ -282,6 +284,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::KOReaderSync:
         startActivityForResult(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::CcxSync:
+        startActivityForResult(std::make_unique<CcxSyncSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::ReadingStats:
         startActivityForResult(std::make_unique<ReadingStatsActivity>(renderer, mappedInput), resultHandler);
