@@ -460,6 +460,12 @@ CcxSyncEngine::Summary CcxSyncEngine::run(PhaseFn onPhase, void* ctx, bool* canc
     }
     report(onPhase, ctx, Phase::APPLY, static_cast<int>(i + 1), static_cast<int>(localBooks.size()));
   }
+  // Persist tombstones learned in APPLY now: saveBook() above already wrote
+  // the refreshed bmGuids, so a cancel or DOWNLOAD/PUSH failure before DONE's
+  // saveGlobal() would lose the tombstone while bmGuids no longer holds the
+  // guid -- next run would re-insert the remote live row. Double save is safe
+  // (256-cap enforced on save).
+  CCXSYNC_STATE.saveGlobal();
 
   // ---- DOWNLOAD ----
   const int dlTotal = static_cast<int>(acc.books().size());
